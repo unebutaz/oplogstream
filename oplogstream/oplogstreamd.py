@@ -1,60 +1,114 @@
 #!/usr/bin/env python
 
+import glob
 import os
 import sys
-import signal
 import logging
-import lockfile
-import daemon
+import logging.handlers
 import watcher
 import ConfigParser
-
-from pymongo import MongoClient
+import daemon
+import locale
 from handlers import PrintOpHandler
 
-print sys.argv
 
-here = os.path.dirname(os.path.dirname(sys.argv[0]))
+defaultConfig = {
+    'pid_file': '/var/run/oplogstream.pid',
+    'log_file': '/tmp/oplogstream.log',
+    'log_level': 'DEBUG',
+    'mongodb': {
+        'host': 'localhost',
+        'post': '27017',
+        'db': 'local',
+        'colelction': 'oplog.rs',
+    },
+    'rabbitmq': {
+        'host': 'localhost',
+        'port': '5672',
+        'vhost': '/',
+        'exchange': ''
+    }
+}
 
-config_path = None
-paths = [
-    os.path.join(here, 'oplogstream.conf'),
-    os.path.join('etc', 'oplogstream.conf')
-]
 
-for p in paths:
-    if os.path.exists(p):
-        config_path = p
-        break
-
+# manage configuration
 try:
-    config = ConfigParser.SafeConfigParser()
-    if config_path is not None:
-        config.read(config_path)
+
+    path = os.path.realpath(__file__)
+    path = os.path.dirname(os.path.dirname(path))
+
+    config = ConfigParser.ConfigParser(defaultConfig)
+
+    if os.path.exists('/etc/oplogstream/conf.d/'):
+        configPath = '/etc/oplogstream/conf.d/'
+    elif os.path.exists('/etc/oplogstream/config.cfg'):
+        configPath = '/etc/oplogstream/config.cfg'
     else:
-        raise LookupError("Could not find config file.")
-except Exception as err:
-    print(err.message)
+        configPath = path + '/config.cfg'
+
+    if not os.access(configPath, os.R_OK):
+        print('Unable to read configuration file at %s' % configPath)
+        sys.exit(1)
+
+    if os.path.isdir(configPath):
+        for conf in glob.glob(os.path.join(configPath, ".cfg")):
+            config.read(conf)
+    else:
+        config.read(configPath)
+
+except ConfigParser.Error:
+    print("Configuration file not found or corrupted.")
     sys.exit(1)
 
-target_dbs = config.get('filter', 'databases')
-target_ops = config.get('filter', 'operations')
-target_collections = config.get('filter', 'collections')
 
-(host, port, db, collection) = config.get('mongodb', 'host'), config.get('mongodb', 'port'), \
-    config.get('mongodb', 'db'), config.get('mongodb', 'collection')
+# Set up logging
+logFile = config.get('Main', 'log_file')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-connection = MongoClient(host, int(port), socketTimeoutMS=20000).get_database(db).get_collection(collection)
+handler = logging.handlers.RotatingFileHandler(logFile)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
 
-context = daemon.DaemonContext(
-    working_directory='/',
-    umask=0o002,
-    pidfile=lockfile.FileLock('/home/sergey/oplogstreamd.pid'),
-    )
+logger.addHandler(handler)
+
+class Oplogstreamd(daemon.Daemon):
+    def run(self):
+        handler = PrintOpHandler()
+        # start oplog monitoring, incoming ops processed by handler
+        # instantiate filters if needed
+        watcher.OplogWatcher(handler).start()
 
 
 if __name__ == '__main__':
-    handler = PrintOpHandler()
-    w = watcher.OplogWatcher(handler, connection)
-    with context:
-        w.start()
+
+    #set locale
+    locale.setlocale(locale.LC_ALL, 'C')
+    os.putenv('LC_ALL', 'C')
+
+    # define pidfile
+    pidFile = config.get('Main', 'pid_file')
+    if not os.access(pidFile, os.W_OK):
+        pidFile = '/tmp/oplogstream.pid'
+        # print('Could not write pid file.')
+        # sys.exit(1)
+
+    # define system pipes
+
+    # instantiate custom daemon class
+    oplogstreamd = Oplogstreamd(pidfile=pidFile, stdout=logFile, stderr=logFile)
+    # figure out operation
+    # do action
+
+    actionDict = {
+        'start': oplogstreamd.start,
+        'stop': oplogstreamd.stop,
+        'restart': oplogstreamd.restart,
+        'run': oplogstreamd.run,
+    }
+
+    print(sys.argv)
+    if len(sys.argv) > 1 and sys.argv[1] in actionDict:
+        actionDict[sys.argv[1]]()
+    else:
+        print 'Unknown command. Use `oplogstreamd %s`' % '|'.join(actionDict.keys())
