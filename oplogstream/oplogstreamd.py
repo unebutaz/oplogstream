@@ -1,43 +1,22 @@
 #!/usr/bin/env python
-
 import glob
 import os
 import sys
+import locale
+
 import logging
 import logging.handlers
+import daemon
 import watcher
 import ConfigParser
-import daemon
-import locale
-from handlers import PrintOpHandler
-
-
-defaultConfig = {
-    'pid_file': '/var/run/oplogstream.pid',
-    'log_file': '/tmp/oplogstream.log',
-    'log_level': 'DEBUG',
-    'mongodb': {
-        'host': 'localhost',
-        'post': '27017',
-        'db': 'local',
-        'colelction': 'oplog.rs',
-    },
-    'rabbitmq': {
-        'host': 'localhost',
-        'port': '5672',
-        'vhost': '/',
-        'exchange': ''
-    }
-}
-
+from handlers import QueueHandler
 
 # manage configuration
 try:
-
     path = os.path.realpath(__file__)
     path = os.path.dirname(os.path.dirname(path))
 
-    config = ConfigParser.ConfigParser(defaultConfig)
+    config = ConfigParser.ConfigParser()
 
     if os.path.exists('/etc/oplogstream/conf.d/'):
         configPath = '/etc/oplogstream/conf.d/'
@@ -60,9 +39,18 @@ except ConfigParser.Error:
     print("Configuration file not found or corrupted.")
     sys.exit(1)
 
+try:
+    logFile = config.get('Main', 'logFile')
+except ConfigParser.NoOptionError:
+    logFile = '/tmp/oplogstreamd.log'
+
+try:
+    pidFile = config.get('Main', 'pidFile')
+except ConfigParser.NoOptionError:
+    pidFile = '/tmp/oplogstreamd.pid'
 
 # Set up logging
-logFile = config.get('Main', 'log_file')
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -74,10 +62,10 @@ logger.addHandler(handler)
 
 class Oplogstreamd(daemon.Daemon):
     def run(self):
-        handler = PrintOpHandler()
+        handler = QueueHandler(**dict(config.items('RabbitMQ')))
         # start oplog monitoring, incoming ops processed by handler
         # instantiate filters if needed
-        watcher.OplogWatcher(handler).start()
+        watcher.OplogWatcher(handler, **dict(config.items('MongoDB'))).start()
 
 
 if __name__ == '__main__':
@@ -86,29 +74,23 @@ if __name__ == '__main__':
     locale.setlocale(locale.LC_ALL, 'C')
     os.putenv('LC_ALL', 'C')
 
-    # define pidfile
-    pidFile = config.get('Main', 'pid_file')
-    if not os.access(pidFile, os.W_OK):
-        pidFile = '/tmp/oplogstream.pid'
-        # print('Could not write pid file.')
-        # sys.exit(1)
+    # check access to pid file
+    if os.access(pidFile, os.W_OK):
+        print('Could not write pid file.')
+        sys.exit(1)
 
     # define system pipes
 
     # instantiate custom daemon class
-    oplogstreamd = Oplogstreamd(pidfile=pidFile, stdout=logFile, stderr=logFile)
+    d = Oplogstreamd(
+        pidfile=pidFile, stdout='/tmp/oplogstream_stdout.txt', stderr='/tmp/oplogstream_stderr.txt', verbose=1
+    )
     # figure out operation
     # do action
 
-    actionDict = {
-        'start': oplogstreamd.start,
-        'stop': oplogstreamd.stop,
-        'restart': oplogstreamd.restart,
-        'run': oplogstreamd.run,
-    }
+    actions = {'start': d.start, 'stop': d.stop, 'restart': d.restart, 'run': d.run}
 
-    print(sys.argv)
-    if len(sys.argv) > 1 and sys.argv[1] in actionDict:
-        actionDict[sys.argv[1]]()
+    if len(sys.argv) > 1 and sys.argv[1] in actions:
+        actions[sys.argv[1]]()
     else:
-        print 'Unknown command. Use `oplogstreamd %s`' % '|'.join(actionDict.keys())
+        print 'Unknown command. Use `oplogstreamd %s`' % '|' . join(actions.keys())

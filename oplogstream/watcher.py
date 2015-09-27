@@ -1,19 +1,19 @@
-
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient, DESCENDING
 from pymongo.errors import AutoReconnect
-from pymongo.cursor import CursorType
+from pymongo.cursor import CursorType, _QUERY_OPTIONS
 from time import sleep
 
 import logging
 
 class OplogWatcher(object):
+
     def __init__(self, handler, host='localhost', port=27017, db='local', collection='oplog.rs', timeout=1.0):
         self.handler = handler
         self.timeout = timeout
         self.host = host
-        self.port = port
-        self.db=db
-        self.collection=collection
+        self.port = int(port)
+        self.db = db
+        self.collection = collection
 
     def start(self):
         logging.info('Trying to connect to mongo.')
@@ -21,14 +21,18 @@ class OplogWatcher(object):
         logging.info('Connection established.')
 
         oplog = connection.get_database(self.db).get_collection(self.collection)
+        # todo: find latest message
+        ts = oplog.find().sort('$natural', DESCENDING).limit(-1).next()['ts']
+
         options = {
-            # 'filter': {{"ts": {"$gte": start}}
             'cursor_type': CursorType.TAILABLE_AWAIT,
             'no_cursor_timeout': True,
         }
-        # todo: handle keyboard interrupt
+        query = {"ts": {"$gte": ts}}
+        # todo: handle keyboard interrupt (needed for foreground mode)
         while True:
-            cursor = oplog.find(**options).sort("$natural", ASCENDING)
+            cursor = oplog.find(query, **options)
+            cursor.add_option(_QUERY_OPTIONS['oplog_replay'])
             try:
                 while cursor.alive:
                     try:
