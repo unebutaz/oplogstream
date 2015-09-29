@@ -63,17 +63,10 @@ logger.addHandler(handler)
 class Oplogstreamd(daemon.Daemon):
     def run(self):
         handler = QueueHandler(**dict(config.items('RabbitMQ')))
-        # start oplog monitoring, incoming ops processed by handler
-        # instantiate filters if needed
         watcher.OplogWatcher(handler, **dict(config.items('MongoDB'))).start()
 
 
-if __name__ == '__main__':
-
-    #set locale
-    locale.setlocale(locale.LC_ALL, 'C')
-    os.putenv('LC_ALL', 'C')
-
+def main():
     # check access to pid file
     if os.access(pidFile, os.W_OK):
         print('Could not write pid file.')
@@ -88,9 +81,17 @@ if __name__ == '__main__':
     # figure out operation
     # do action
 
-    actions = {'start': d.start, 'stop': d.stop, 'restart': d.restart, 'run': d.run}
+    def act(action):
+         return {
+             'start': d.start, 'stop': d.stop, 'restart': d.restart, 'run': d.run
+         }[action]
 
-    if len(sys.argv) > 1 and sys.argv[1] in actions:
-        actions[sys.argv[1]]()
+    if len(sys.argv) > 1:
+        act(sys.argv[1])
     else:
         print 'Unknown command. Use `oplogstreamd %s`' % '|' . join(actions.keys())
+
+
+if __name__ == '__main__':
+    main()
+

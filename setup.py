@@ -17,4 +17,13 @@ dist = setup(
     packages=find_packages(),
     install_requires=['pika', 'pymongo', 'bson'],
     long_description=README,
+    classifiers=[
+        'Development Status :: 1 - Planning',
+        'Intended Audience :: Developers',
+        'Intended Audience :: System Administrators',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: POSIX :: Linux',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
+    ],
 )
