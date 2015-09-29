@@ -1,4 +1,4 @@
-from pika import BlockingConnection, ConnectionParameters, PlainCredentials, SelectConnection, TornadoConnection
+from pika import BlockingConnection, ConnectionParameters, PlainCredentials
 from pprint import pprint
 from bson import json_util, BSON
 import json
@@ -14,6 +14,24 @@ class OpHandler(object):
     def handle(self, op):
         raise NotImplementedError("Please Implement this method")
 
+class OpFilter(object):
+
+    def __init__(self, dbs, colls, ops):
+        self.dbs = dbs
+        self.colls = colls
+        self.ops = ops
+
+    def is_valid(self, ns, op):
+        if not ns:
+            return False
+        db, table = ns.split('.', 1)
+        if len(self.dbs) > 0 and db not in self.dbs:
+            return False
+        if len(self.colls) > 0 and table not in self.colls:
+            return False
+        if len(self.ops) > 0 and op not in self.ops:
+            return False
+        return True
 
 class PrintOpHandler(OpHandler):
 
@@ -22,6 +40,7 @@ class PrintOpHandler(OpHandler):
 
 
 class QueueHandler(OpHandler):
+
     def __init__(self, host=None, port=None, vhost=None, username=None,
                  password=None, exchange='oplog', queue='', dump=DUMP_JSON):
 
@@ -58,10 +77,19 @@ class QueueHandler(OpHandler):
         else:
             raise ValueError('Invalid `dump` parameter for QueueHandler.')
 
+        self.filters = []
+
+    def add_filter(self, filter):
+        if isinstance(filter, OpFilter):
+            self.filters.append(filter)
+        else:
+            raise AttributeError("Not `OpFilter` instance")
+
     def handle(self, op):
-        try:
-            self.channel.basic_publish(
-                exchange=self.exchange, routing_key=self.queue, body=self.dump(op)
-            )
-        except BaseException as err:
-            logging.error(err.message)
+        if all([f.is_valid(op['ns'], op['op']) for f in self.filters]):
+            try:
+                self.channel.basic_publish(
+                    exchange=self.exchange, routing_key=self.queue, body=self.dump(op)
+                )
+            except BaseException as err:
+                logging.error(err.message)

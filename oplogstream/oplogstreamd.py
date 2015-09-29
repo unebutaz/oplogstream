@@ -3,13 +3,19 @@ import glob
 import os
 import sys
 import locale
-
 import logging
 import logging.handlers
 import daemon
-import watcher
 import ConfigParser
-from handlers import QueueHandler
+
+from handlers import QueueHandler, OpFilter
+from watcher import OplogWatcher
+
+CONFIG_FILTER_SECTION = 'Filter'
+CONFIG_MONGO_SECTION = 'MongoDB'
+CONFIG_RABBIT_SECTION = 'RabbitMQ'
+
+DEFAULT_OUT_FILE = '/tmp/oplogstreamd.out'
 
 # manage configuration
 try:
@@ -62,32 +68,35 @@ logger.addHandler(handler)
 
 class Oplogstreamd(daemon.Daemon):
     def run(self):
-        handler = QueueHandler(**dict(config.items('RabbitMQ')))
-        watcher.OplogWatcher(handler, **dict(config.items('MongoDB'))).start()
+        mongodb_options = dict(config.items(CONFIG_MONGO_SECTION))
+        rabbitmq_options = dict(config.items(CONFIG_RABBIT_SECTION))
+        op_handler = QueueHandler(**rabbitmq_options)
+
+        if config.has_section(CONFIG_FILTER_SECTION) and len(config.items(CONFIG_FILTER_SECTION)):
+            databses = config.get(CONFIG_FILTER_SECTION, 'databases').split(',')
+            collections = config.get(CONFIG_FILTER_SECTION, 'collections').split(',')
+            operations = config.get(CONFIG_FILTER_SECTION, 'operations').split(',')
+            op_handler.add_filter(OpFilter(databses, collections, operations))
+
+        oplog_watcher = OplogWatcher(op_handler, **mongodb_options)
+        oplog_watcher.start()
 
 
 def main():
+    locale.setlocale(locale.LC_ALL)
     # check access to pid file
-    if os.access(pidFile, os.W_OK):
-        print('Could not write pid file.')
-        sys.exit(1)
-
     # define system pipes
-
     # instantiate custom daemon class
-    d = Oplogstreamd(
-        pidfile=pidFile, stdout='/tmp/oplogstream_stdout.txt', stderr='/tmp/oplogstream_stderr.txt', verbose=1
-    )
-    # figure out operation
-    # do action
+    daemon = Oplogstreamd(pidfile=pidFile, stdout=DEFAULT_OUT_FILE, stderr=DEFAULT_OUT_FILE, verbose=0)
+    actions = {
+        'start': daemon.start,
+        'stop': daemon.stop,
+        'restart': daemon.restart,
+        'run': daemon.run
+    }
 
-    def act(action):
-         return {
-             'start': d.start, 'stop': d.stop, 'restart': d.restart, 'run': d.run
-         }[action]
-
-    if len(sys.argv) > 1:
-        act(sys.argv[1])
+    if len(sys.argv) > 1 and sys.argv[1] in actions:
+        actions[sys.argv[1]]()
     else:
         print 'Unknown command. Use `oplogstreamd %s`' % '|' . join(actions.keys())
 

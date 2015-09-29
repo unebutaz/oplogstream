@@ -13,12 +13,13 @@ dist = setup(
     author="Sergey Yashchenko",
     author_email="yashenko.s@gmail.com",
     description=("Daemon for monitoring and publishing mongodb oplog."),
-    keywords = "mongodb oplog rabbitmq",
-    packages=find_packages(),
-    install_requires=['pika', 'pymongo', 'bson'],
+    keywords="mongodb oplog rabbitmq",
+    license='MIT',
+    packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
+    install_requires=['pika', 'pymongo'],
     long_description=README,
     classifiers=[
-        'Development Status :: 1 - Planning',
+        'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
         'Intended Audience :: System Administrators',
         'License :: OSI Approved :: MIT License',
@@ -26,4 +27,9 @@ dist = setup(
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
     ],
+    entry_points={
+        'console_scripts': [
+            'sample=oplogstream.oplogstreamd:main',
+        ],
+    }
 )

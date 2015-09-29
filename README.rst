@@ -1,8 +1,5 @@
-TODO:
-=====
-    - [] rpc interface
-         - register streamer and confirm exchange setting, ping execution
-    - [] multithreaded or async handler
-    - [] ssl connection to queue
-    - [] stream handler for foreground mode
-    - [] batch publish to rmq
+MongoDB Oplog Publisher:
+========================
+
+Simple utility, which subscribe to mongodb oplog and publish its entries to RabbitMQ.
+Currently supported only on Ubuntu > 12.04, with python2.7.

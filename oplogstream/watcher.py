@@ -5,6 +5,8 @@ from time import sleep
 
 import logging
 
+logger = logging.getLogger('__main__')
+
 class OplogWatcher(object):
 
     def __init__(self, handler, host='localhost', port=27017, db='local', collection='oplog.rs', timeout=1.0):
@@ -16,9 +18,9 @@ class OplogWatcher(object):
         self.collection = collection
 
     def start(self):
-        logging.info('Trying to connect to mongo.')
+        logger.info('Trying to connect to mongo.')
         connection = MongoClient(host=self.host, port=self.port, socketTimeoutMS=20000)
-        logging.info('Connection established.')
+        logger.info('Connection established.')
 
         oplog = connection.get_database(self.db).get_collection(self.collection)
         # todo: find latest message
@@ -42,5 +44,6 @@ class OplogWatcher(object):
             except AutoReconnect:
                 sleep(self.timeout)
             except KeyboardInterrupt:
-                logging.info('Ctrl-C, stop iteration')
+                logger.info('Ctrl-C, stop iteration')
                 break
+        logger.log('done')
