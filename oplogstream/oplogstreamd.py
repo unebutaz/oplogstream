@@ -8,7 +8,7 @@ import logging.handlers
 import daemon
 import ConfigParser
 
-from handlers import QueueHandler, OpFilter
+from handlers import MultithreadedQueue, OpFilter
 from watcher import OplogWatcher
 
 CONFIG_FILTER_SECTION = 'Filter'
@@ -70,12 +70,12 @@ class Oplogstreamd(daemon.Daemon):
     def run(self):
         mongodb_options = dict(config.items(CONFIG_MONGO_SECTION))
         rabbitmq_options = dict(config.items(CONFIG_RABBIT_SECTION))
-        op_handler = QueueHandler(**rabbitmq_options)
+        op_handler = MultithreadedQueue(threads=1, **rabbitmq_options)
 
         if config.has_section(CONFIG_FILTER_SECTION) and len(config.items(CONFIG_FILTER_SECTION)):
-            databses = config.get(CONFIG_FILTER_SECTION, 'databases').split(',')
-            collections = config.get(CONFIG_FILTER_SECTION, 'collections').split(',')
-            operations = config.get(CONFIG_FILTER_SECTION, 'operations').split(',')
+            databses = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'databases').split(','))
+            collections = map(lambda s: s.strip(),config.get(CONFIG_FILTER_SECTION, 'collections').split(','))
+            operations = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'operations').split(','))
             op_handler.add_filter(OpFilter(databses, collections, operations))
 
         oplog_watcher = OplogWatcher(op_handler, **mongodb_options)
@@ -88,17 +88,17 @@ def main():
     # define system pipes
     # instantiate custom daemon class
     daemon = Oplogstreamd(pidfile=pidFile, stdout=DEFAULT_OUT_FILE, stderr=DEFAULT_OUT_FILE, verbose=0)
-    actions = {
+    action_map = {
         'start': daemon.start,
         'stop': daemon.stop,
         'restart': daemon.restart,
         'run': daemon.run
     }
 
-    if len(sys.argv) > 1 and sys.argv[1] in actions:
-        actions[sys.argv[1]]()
+    if len(sys.argv) > 1 and sys.argv[1] in action_map:
+        action_map[sys.argv[1]]()
     else:
-        print 'Unknown command. Use `oplogstreamd %s`' % '|' . join(actions.keys())
+        print 'Unknown command. Use `oplogstreamd %s`' % '|' . join(action_map.keys())
 
 
 if __name__ == '__main__':

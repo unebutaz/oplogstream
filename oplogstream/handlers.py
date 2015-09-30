@@ -1,6 +1,8 @@
 from pika import BlockingConnection, ConnectionParameters, PlainCredentials
 from pprint import pprint
 from bson import json_util, BSON
+import threading
+import Queue
 import json
 import logging
 
@@ -10,6 +12,15 @@ DUMP_BSON = 2
 logger = logging.getLogger('__main__')
 
 class OpHandler(object):
+
+    def __init__(self):
+        self.filters = []
+
+    def add_filter(self, filter):
+        if isinstance(filter, OpFilter):
+            self.filters.append(filter)
+        else:
+            raise AttributeError("Not `OpFilter` instance")
 
     def handle(self, op):
         raise NotImplementedError("Please Implement this method")
@@ -43,6 +54,7 @@ class QueueHandler(OpHandler):
 
     def __init__(self, host=None, port=None, vhost=None, username=None,
                  password=None, exchange='oplog', queue='', dump=DUMP_JSON):
+        super(QueueHandler, self).__init__()
 
         parameters = ConnectionParameters()
 
@@ -77,14 +89,6 @@ class QueueHandler(OpHandler):
         else:
             raise ValueError('Invalid `dump` parameter for QueueHandler.')
 
-        self.filters = []
-
-    def add_filter(self, filter):
-        if isinstance(filter, OpFilter):
-            self.filters.append(filter)
-        else:
-            raise AttributeError("Not `OpFilter` instance")
-
     def handle(self, op):
         if all([f.is_valid(op['ns'], op['op']) for f in self.filters]):
             try:
@@ -93,3 +97,41 @@ class QueueHandler(OpHandler):
                 )
             except BaseException as err:
                 logging.error(err.message)
+
+
+class _QueueWorker(threading.Thread):
+
+    def __init__(self, q, stop, connection):
+        super(_QueueWorker, self).__init__()
+        self.connection = connection
+        self.stop = stop
+        self.q = q
+
+    def run(self):
+        while not self.stop.isSet():
+            self.connection.handle(self.q.get())
+
+
+class MultithreadedQueue(OpHandler):
+
+    def __init__(self, *args, **kwargs):
+        super(MultithreadedQueue, self).__init__()
+
+        self.q = Queue.Queue()
+        self.stop = threading.Event()
+        self.tpool = {}
+
+        threads = kwargs.pop('threads')
+        for i in xrange(threads):
+            self.tpool[i] = _QueueWorker(self.q, self.stop, QueueHandler(*args, **kwargs))
+            self.tpool[i].name = "_QueueWorker_%s" % i
+            self.tpool[i].daemon = True
+            self.tpool[i].start()
+
+    def handle(self, op):
+        if all([f.is_valid(op['ns'], op['op']) for f in self.filters]):
+            self.q.put(op)
+
+    def close(self):
+        self.q.join()
+        self.stop.set()

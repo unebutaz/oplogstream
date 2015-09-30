@@ -29,7 +29,7 @@ dist = setup(
     ],
     entry_points={
         'console_scripts': [
-            'sample=oplogstream.oplogstreamd:main',
+            'oplogstreamd=oplogstream.oplogstreamd:main',
         ],
     }
 )

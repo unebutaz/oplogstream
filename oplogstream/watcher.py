@@ -1,6 +1,6 @@
 from pymongo import MongoClient, DESCENDING
 from pymongo.errors import AutoReconnect
-from pymongo.cursor import CursorType, _QUERY_OPTIONS
+from pymongo.cursor import CursorType
 from time import sleep
 
 import logging
@@ -34,7 +34,6 @@ class OplogWatcher(object):
         # todo: handle keyboard interrupt (needed for foreground mode)
         while True:
             cursor = oplog.find(query, **options)
-            cursor.add_option(_QUERY_OPTIONS['oplog_replay'])
             try:
                 while cursor.alive:
                     try:
@@ -46,4 +45,3 @@ class OplogWatcher(object):
             except KeyboardInterrupt:
                 logger.info('Ctrl-C, stop iteration')
                 break
-        logger.log('done')
