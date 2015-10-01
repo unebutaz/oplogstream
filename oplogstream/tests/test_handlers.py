@@ -13,8 +13,7 @@ class HandlerTest(unittest.TestCase):
         self.assertIsInstance(handler, OpHandler)
 
     def test_queue_handler(self):
-        handler = QueueHandler()
-        self.assertIsInstance(handler, OpHandler)
+        self.assertTrue(issubclass(QueueHandler, OpHandler))
 
 if __name__ == '__main__':
     unittest.main()
