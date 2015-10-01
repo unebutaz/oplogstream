@@ -74,7 +74,7 @@ class Oplogstreamd(daemon.Daemon):
 
         if config.has_section(CONFIG_FILTER_SECTION) and len(config.items(CONFIG_FILTER_SECTION)):
             databses = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'databases').split(','))
-            collections = map(lambda s: s.strip(),config.get(CONFIG_FILTER_SECTION, 'collections').split(','))
+            collections = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'collections').split(','))
             operations = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'operations').split(','))
             op_handler.add_filter(OpFilter(databses, collections, operations))
 
