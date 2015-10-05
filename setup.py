@@ -9,7 +9,7 @@ except:
 
 dist = setup(
     name="oplogstream",
-    version="0.0.1",
+    version="0.1.0",
     author="Sergey Yashchenko",
     author_email="yashenko.s@gmail.com",
     description=("Daemon for monitoring and publishing mongodb oplog."),
