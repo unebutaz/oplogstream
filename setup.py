@@ -18,6 +18,7 @@ dist = setup(
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
     install_requires=['pika', 'pymongo'],
     long_description=README,
+    include_package_data=True,
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',

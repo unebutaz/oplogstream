@@ -53,7 +53,7 @@ class PrintOpHandler(OpHandler):
 class QueueHandler(OpHandler):
 
     def __init__(self, host=None, port=None, vhost=None, username=None,
-                 password=None, exchange='oplog', queue='', dump=DUMP_JSON):
+                 password=None, exchange='oplog', queue=None, max_size=500000, dump=DUMP_JSON):
         super(QueueHandler, self).__init__()
 
         parameters = ConnectionParameters()
@@ -75,7 +75,7 @@ class QueueHandler(OpHandler):
         else:
             channel.exchange_delete(exchange)
             channel.exchange_declare(exchange, 'direct')
-            channel.queue_declare(queue, durable=True)
+            channel.queue_declare(queue, durable=True, arguments={'x-max-length': max_size})
             channel.queue_bind(queue, exchange)
 
         self.exchange = exchange
@@ -117,7 +117,8 @@ class MultithreadedQueue(OpHandler):
     def __init__(self, *args, **kwargs):
         super(MultithreadedQueue, self).__init__()
 
-        self.q = Queue.Queue()
+        q_size = kwargs.pop('q_size')
+        self.q = Queue.Queue(q_size)
         self.stop = threading.Event()
         self.tpool = {}
 

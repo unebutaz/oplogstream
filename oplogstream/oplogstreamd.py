@@ -11,6 +11,7 @@ import ConfigParser
 from handlers import MultithreadedQueue, OpFilter
 from watcher import OplogWatcher
 
+CONFIG_MAIN_SECTION = 'Main'
 CONFIG_FILTER_SECTION = 'Filter'
 CONFIG_MONGO_SECTION = 'MongoDB'
 CONFIG_RABBIT_SECTION = 'RabbitMQ'
@@ -66,17 +67,25 @@ handler.setFormatter(formatter)
 
 logger.addHandler(handler)
 
+
 class Oplogstreamd(daemon.Daemon):
     def run(self):
         mongodb_options = dict(config.items(CONFIG_MONGO_SECTION))
         rabbitmq_options = dict(config.items(CONFIG_RABBIT_SECTION))
-        op_handler = MultithreadedQueue(threads=1, **rabbitmq_options)
+
+        threads = config.getint(CONFIG_MAIN_SECTION, 'threads') \
+            if config.has_option(CONFIG_MAIN_SECTION, 'threads') else 1
+
+        q_size = config.getint(CONFIG_MAIN_SECTION, 'q_size') \
+            if config.has_option(CONFIG_MAIN_SECTION, 'q_size') else 32768
+
+        op_handler = MultithreadedQueue(threads=threads, q_size=q_size, **rabbitmq_options)
 
         if config.has_section(CONFIG_FILTER_SECTION) and len(config.items(CONFIG_FILTER_SECTION)):
-            databses = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'databases').split(','))
+            databases = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'databases').split(','))
             collections = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'collections').split(','))
             operations = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'operations').split(','))
-            op_handler.add_filter(OpFilter(databses, collections, operations))
+            op_handler.add_filter(OpFilter(databases, collections, operations))
 
         oplog_watcher = OplogWatcher(op_handler, **mongodb_options)
         oplog_watcher.start()
@@ -103,4 +112,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
