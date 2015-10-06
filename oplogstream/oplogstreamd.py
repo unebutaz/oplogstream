@@ -30,10 +30,11 @@ try:
     elif os.path.exists('/etc/oplogstream/config.cfg'):
         configPath = '/etc/oplogstream/config.cfg'
     else:
-        configPath = path + '/config.cfg'
+        configPath = os.path.join(path, 'config.cfg')
 
-    if not os.access(configPath, os.R_OK):
-        print('Unable to read configuration file at %s' % configPath)
+    userConfig = os.path.join(os.getcwd(), 'config.cfg')
+    if not os.access(configPath, os.R_OK) and not os.path.exists(userConfig):
+        print('Could not find configuration file.')
         sys.exit(1)
 
     if os.path.isdir(configPath):
@@ -42,8 +43,10 @@ try:
     else:
         config.read(configPath)
 
-except ConfigParser.Error:
-    print("Configuration file not found or corrupted.")
+    config.read(userConfig)
+
+except ConfigParser.Error as err:
+    print(err.message)
     sys.exit(1)
 
 try:
@@ -69,6 +72,7 @@ logger.addHandler(handler)
 
 
 class Oplogstreamd(daemon.Daemon):
+
     def run(self):
         mongodb_options = dict(config.items(CONFIG_MONGO_SECTION))
         rabbitmq_options = dict(config.items(CONFIG_RABBIT_SECTION))
@@ -81,11 +85,11 @@ class Oplogstreamd(daemon.Daemon):
 
         op_handler = MultithreadedQueue(threads=threads, q_size=q_size, **rabbitmq_options)
 
-        if config.has_section(CONFIG_FILTER_SECTION) and len(config.items(CONFIG_FILTER_SECTION)):
-            databases = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'databases').split(','))
-            collections = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'collections').split(','))
-            operations = map(lambda s: s.strip(), config.get(CONFIG_FILTER_SECTION, 'operations').split(','))
-            op_handler.add_filter(OpFilter(databases, collections, operations))
+        if config.has_section(CONFIG_FILTER_SECTION) and len(config.items(CONFIG_FILTER_SECTION)) > 0:
+            filter_options = {}
+            for k, v in config.items(CONFIG_FILTER_SECTION):
+                filter_options[k] = map(lambda s: s.strip(), v.split(','))
+            op_handler.add_filter(OpFilter(**filter_options))
 
         oplog_watcher = OplogWatcher(op_handler, **mongodb_options)
         oplog_watcher.start()

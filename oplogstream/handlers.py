@@ -27,10 +27,10 @@ class OpHandler(object):
 
 class OpFilter(object):
 
-    def __init__(self, dbs, colls, ops):
-        self.dbs = dbs
-        self.colls = colls
-        self.ops = ops
+    def __init__(self, databases=None, collections=None, operations=None):
+        self.dbs = databases if not None else []
+        self.colls = collections if not None else []
+        self.ops = operations if not None else []
 
     def is_valid(self, ns, op):
         if not ns:
@@ -53,7 +53,7 @@ class PrintOpHandler(OpHandler):
 class QueueHandler(OpHandler):
 
     def __init__(self, host=None, port=None, vhost=None, username=None,
-                 password=None, exchange='oplog', queue=None, max_size=500000, dump=DUMP_JSON):
+                 password=None, exchange='oplog', queue=None, dump=DUMP_JSON):
         super(QueueHandler, self).__init__()
 
         parameters = ConnectionParameters()
@@ -75,7 +75,7 @@ class QueueHandler(OpHandler):
         else:
             channel.exchange_delete(exchange)
             channel.exchange_declare(exchange, 'direct')
-            channel.queue_declare(queue, durable=True, arguments={'x-max-length': max_size})
+            channel.queue_declare(queue, durable=True)
             channel.queue_bind(queue, exchange)
 
         self.exchange = exchange

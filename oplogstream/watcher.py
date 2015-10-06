@@ -9,28 +9,35 @@ logger = logging.getLogger('__main__')
 
 class OplogWatcher(object):
 
-    def __init__(self, handler, host='localhost', port=27017, db='local', collection='oplog.rs', timeout=1.0):
+    def __init__(self, handler, dsn='mongodb://localhost', port=27017, replicaSet=None, db='local',
+                 collection='oplog.rs', timeout=1.0):
         self.handler = handler
         self.timeout = timeout
-        self.host = host
+        self.dsn = dsn
         self.port = int(port)
         self.db = db
         self.collection = collection
+        self.replicaSet = replicaSet
 
     def start(self):
         logger.info('Trying to connect to mongo.')
-        connection = MongoClient(host=self.host, port=self.port, socketTimeoutMS=20000)
+        connection = MongoClient(self.dsn, port=self.port, replicaSet=self.replicaSet, socketTimeoutMS=20000)
         logger.info('Connection established.')
 
         oplog = connection.get_database(self.db).get_collection(self.collection)
         # todo: find latest message
-        ts = oplog.find().sort('$natural', DESCENDING).limit(-1).next()['ts']
+        query = {}
+        if oplog.count():
+            query['ts'] = {"$gte": oplog.find().sort('$natural', DESCENDING).limit(-1).next()['ts']}
+        else:
+            logger.warning('Oplog is empty. Check connection parameters.')
 
         options = {
             'cursor_type': CursorType.TAILABLE_AWAIT,
             'no_cursor_timeout': True,
         }
-        query = {"ts": {"$gte": ts}}
+
+        logger.info('Start following oplog.')
         # todo: handle keyboard interrupt (needed for foreground mode)
         while True:
             cursor = oplog.find(query, **options)
