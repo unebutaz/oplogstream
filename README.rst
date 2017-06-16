@@ -9,7 +9,7 @@ Installation
 
 .. code-block:: sh
 
-    `pip install oplogstream --extra-index-url https://gitlab.murka.com/murka-game-center/oplogstream.git`
+    `pip install oplogstream`
 
 Configuration
 -------------
